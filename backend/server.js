@@ -1,14 +1,13 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+require('dotenv').config();
 const cors = require('cors');
 const helmet = require('helmet');
 const chatRoutes = require('./routes/chatRoutes');
 const audioRoutes = require('./routes/audioRoutes');
 const ragRoutes = require("./routes/rag.routes");
 const sttRoutes = require("./routes/stt.routes");
-
-dotenv.config();
+const path = require("path");
 
 const app = express();
 
@@ -29,13 +28,9 @@ app.use("/audio", express.static(path.join(__dirname, "uploads")));
 app.get('/', (req, res) => {
   res.send('I.V.A.N Backend funcionando.');
 });
-app.use('/audio', express.static('backend/audio'));
 
 // Conexión a MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGODB_URI)
 .then(() => {
   console.log('Conectado a MongoDB');
   app.listen(process.env.PORT, () => {

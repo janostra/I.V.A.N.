@@ -1,31 +1,36 @@
 const fs = require("fs");
-const path = require("path");
-const { Configuration, OpenAIApi } = require("openai");
+const fsPromises = require("fs/promises");
+const OpenAI = require("openai");
 
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-const openai = new OpenAIApi(configuration);
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY});
 
-const transcribeAudio = async (req, res) => {
+async function transcribeAudio(req, res) {
+  const filePath = req.file.path;
+
   try {
-    const audioPath = req.file.path;
+    const transcription = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(filePath),
+      model: "whisper-1",
+    });
 
-    const response = await openai.createTranscription(
-      fs.createReadStream(audioPath),
-      "whisper-1"
-    );
+    // Eliminamos el archivo luego de usarlo
+    await fsPromises.unlink(filePath);
 
-    // Elimina el archivo temporal
-    fs.unlink(audioPath, () => {});
+    res.json({ text: transcription.text });
+  } catch (error) {
+    console.error("Error en STT:", error);
 
-    res.json({ text: response.data.text });
-  } catch (err) {
-    console.error("Error en STT:", err.message);
+    // Intentar eliminar archivo incluso si falló la transcripción
+    try {
+      await fsPromises.unlink(filePath);
+    } catch (err) {
+      console.error("Error al eliminar el archivo:", err);
+    }
+
     res.status(500).json({ error: "Error al transcribir audio" });
   }
-};
+}
 
 module.exports = {
-  transcribeAudio,
-};
+    transcribeAudio,
+  };

@@ -5,10 +5,24 @@ const path = require('path');
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID; // Este lo obtenés desde ElevenLabs
 
-const outputDir = path.join(__dirname, '..', 'audio');
-if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
+// Cambiamos la carpeta de salida a "audio/response"
+const outputDir = path.join(__dirname, '..', 'audio', 'response');
+if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-async function textToSpeech(text, fileName = 'ivan-response.mp3') {
+// Función para obtener el siguiente número de archivo
+function getNextAudioNumber() {
+  const files = fs.readdirSync(outputDir);
+  const audioFiles = files.filter(file => file.startsWith('audio_') && file.endsWith('.mp3'));
+  const numbers = audioFiles.map(file => parseInt(file.split('_')[1].split('.mp3')[0]));
+  const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+  return nextNumber;
+}
+
+async function textToSpeech(text) {
+  const fileNumber = getNextAudioNumber();
+  const fileName = `audio_${fileNumber}.mp3`;
+  const outputPath = path.join(outputDir, fileName);
+
   try {
     const response = await axios({
       method: 'POST',
@@ -29,15 +43,16 @@ async function textToSpeech(text, fileName = 'ivan-response.mp3') {
       }
     });
 
-    const outputPath = path.join(outputDir, fileName);
     const writer = fs.createWriteStream(outputPath);
     response.data.pipe(writer);
 
     return new Promise((resolve, reject) => {
-      writer.on('finish', () => resolve(`/audio/${fileName}`));
+      writer.on('finish', () => {
+        console.log(`Audio generado en: ${outputPath}`);
+        resolve(`/audio/response/${fileName}`); // Ruta relativa al archivo generado
+      });
       writer.on('error', reject);
     });
-
   } catch (error) {
     console.error('Error en ElevenLabs:', error.response?.data || error.message);
     throw new Error('Error al generar audio con ElevenLabs.');

@@ -7,6 +7,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const audioRoutes = require('./routes/audioRoutes');
 const ragRoutes = require("./routes/rag.routes");
 const sttRoutes = require("./routes/stt.routes");
+const talkRoutes = require("./routes/talk.routes")
 const path = require("path");
 
 const app = express();
@@ -20,6 +21,8 @@ app.use('/api', chatRoutes);
 app.use('/api', audioRoutes);
 app.use("/api", ragRoutes);
 app.use("/api", sttRoutes);
+app.use("/api", talkRoutes);
+
 app.use("/audio", express.static(path.join(__dirname, "uploads")));
 
 

@@ -18,6 +18,6 @@ def upload_text(user_id: str = Body(...), text: str = Body(...)):
     return result
 
 @app.post("/rag/query")
-def query_knowledge(query: str = Body(...)):
+def query_knowledge(query: str = Body(..., embed=True)):
     result = query_vectorstore(query)
     return result

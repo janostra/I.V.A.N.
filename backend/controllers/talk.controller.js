@@ -3,72 +3,82 @@ const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const { OpenAI } = require('openai');
-const { textToSpeech } = require('../services/elevenlabsService'); // Ajusta la ruta si es necesario
+const { textToSpeech } = require('../services/elevenlabsService');
+const animateFace = require('../services/a2fHeadlessClient');  
+// — asume que a2fHeadlessClient expone la función animateFace(wavPath)
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const talk = async (req, res) => {
-  const inputPath = req.file.path;  // Archivo enviado en audio/request/
-  const convertedPath = path.join(__dirname, '..', 'audio', 'request', `${Date.now()}.mp3`);
+async function talk(req, res) {
+  const inputPath = req.file.path;
+  // vamos a generar WAV en vez de mp3
+  const timestamp = Date.now();
+  const wavRequestPath = path.join(__dirname, '..', 'audio', 'request', `${timestamp}.wav`);
+  const wavResponsePath = path.join(__dirname, '..', 'audio', 'response', `resp-${timestamp}.wav`);
 
   try {
-    // 1. Convertir audio a mp3
+    // 1. Convertir la grabación original a WAV de 16-bit 48 kHz (asegura compatibilidad A2F)
     await new Promise((resolve, reject) => {
       ffmpeg(inputPath)
-        .toFormat('mp3')
+        .outputOptions([
+          '-acodec pcm_s16le',
+          '-ar 48000',
+          '-ac 1'
+        ])
+        .toFormat('wav')
         .on('end', resolve)
         .on('error', reject)
-        .save(convertedPath);
+        .save(wavRequestPath);
     });
 
     // 2. Transcripción con Whisper
     const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(convertedPath),
+      file: fs.createReadStream(wavRequestPath),
       model: 'whisper-1',
     });
     const userText = transcription.text;
     console.log('Usuario dijo:', userText);
 
-    // 3. Obtener contexto vía RAG
-    const ragResponse = await axios.post('http://localhost:8001/rag/query', { query: userText });
-    const context = ragResponse.data.context;
+    // 3. Contexto RAG
+    const rag = await axios.post('http://localhost:8001/rag/query', { query: userText });
+    const context = rag.data.context;
     console.log('Contexto RAG:', context);
 
-    // 4. Respuesta de GPT-4 incluyendo contexto
-    const completion = await openai.chat.completions.create({
+    // 4. GPT-4 responde
+    const chat = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
-        { role: 'system', content: `Contexto relevante:\n${context}` },
+        { role: 'system', content: `Contexto:\n${context}` },
         { role: 'user', content: userText }
       ]
     });
-    const aiResponse = completion.choices[0].message.content;
-    console.log('Respuesta IA:', aiResponse);
+    const aiText = chat.choices[0].message.content;
+    console.log('Respuesta IA:', aiText);
 
-    // 5. TTS con ElevenLabs
-    const responseDirectory = path.join(__dirname, '..', 'audio', 'response');
-    if (!fs.existsSync(responseDirectory)) fs.mkdirSync(responseDirectory, { recursive: true });
+    // 5. TTS ElevenLabs → guardamos WAV directamente
+    //    textToSpeech deberá admitir un parámetro de formato WAV
+    await textToSpeech(aiText, wavResponsePath);
+    console.log('Audio respuesta guardado en WAV:', wavResponsePath);
 
-    const audioRelativePath = await textToSpeech(aiResponse); // Guarda en audio/response
-    console.log('Audio generado en:', audioRelativePath);
-    const audioAbsolutePath = path.join(__dirname, '..', audioRelativePath);
+    // 6. Enviar a Audio2Face headless para animar
+    await animateFace(wavResponsePath);
 
-    // 6. Enviar audio al cliente
-    res.sendFile(audioAbsolutePath, err => {
+    // 7. Devolver el audio WAV al cliente Unreal
+    res.sendFile(wavResponsePath, err => {
       if (err) {
-        console.error('Error al enviar archivo:', err);
-        return res.status(500).json({ error: 'Error al enviar audio' });
+        console.error('Error enviando WAV al cliente:', err);
+        res.status(500).json({ error: 'Error enviando audio' });
       }
-      // Opcional: limpieza de temporales si lo deseas
+      // opcional: limpiar temporales
       // fs.unlinkSync(inputPath);
-      // fs.unlinkSync(convertedPath);
-      // fs.unlinkSync(audioAbsolutePath);
+      // fs.unlinkSync(wavRequestPath);
+      // fs.unlinkSync(wavResponsePath);
     });
 
   } catch (err) {
     console.error('Error en /talk:', err);
-    res.status(500).json({ error: 'Error al procesar la conversación' });
+    res.status(500).json({ error: 'Error en procesamiento de audio' });
   }
-};
+}
 
 module.exports = { talk };

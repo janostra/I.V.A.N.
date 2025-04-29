@@ -9,20 +9,8 @@ const VOICE_ID = process.env.ELEVENLABS_VOICE_ID; // Este lo obtenés desde Elev
 const outputDir = path.join(__dirname, '..', 'audio', 'response');
 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-// Función para obtener el siguiente número de archivo
-function getNextAudioNumber() {
-  const files = fs.readdirSync(outputDir);
-  const audioFiles = files.filter(file => file.startsWith('audio_') && file.endsWith('.mp3'));
-  const numbers = audioFiles.map(file => parseInt(file.split('_')[1].split('.mp3')[0]));
-  const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-  return nextNumber;
-}
-
-async function textToSpeech(text) {
-  const fileNumber = getNextAudioNumber();
-  const fileName = `audio_${fileNumber}.mp3`;
-  const outputPath = path.join(outputDir, fileName);
-
+// Ahora la función acepta también el outputPath
+async function textToSpeech(text, outputPath) {
   try {
     const response = await axios({
       method: 'POST',
@@ -49,7 +37,7 @@ async function textToSpeech(text) {
     return new Promise((resolve, reject) => {
       writer.on('finish', () => {
         console.log(`Audio generado en: ${outputPath}`);
-        resolve(`/audio/response/${fileName}`); // Ruta relativa al archivo generado
+        resolve(outputPath); // Devolvemos la ruta final del archivo
       });
       writer.on('error', reject);
     });

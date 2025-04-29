@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
+require('./services/autoRequest'); 
 const cors = require('cors');
 const helmet = require('helmet');
 const chatRoutes = require('./routes/chatRoutes');
